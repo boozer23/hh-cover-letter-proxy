@@ -1,0 +1,19 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Проверка синтаксиса Python
+        run: python -m py_compile main.py
+
+      - name: Сборка Docker-образа
+        run: docker build -t hh-cover-letter-proxy .
