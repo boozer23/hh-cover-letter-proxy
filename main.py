@@ -1,3 +1,4 @@
+import asyncio
 import os
 import re
 import time
@@ -68,14 +69,15 @@ def build_prompt(vacancy: str, profile: str, tone: str) -> str:
         "- Не используй канцелярит.\n"
         "- Не пересказывай профиль списком.\n\n"
         "КАК НАДО:\n"
-        "- 3-4 живых предложения.\n"
+        "- 3-4 законченных предложения.\n"
         "- 1-2 конкретных проекта из профиля, релевантных вакансии.\n"
-        "- Простой разговорный язык. Без markdown и эмодзи.\n\n"
+        "- Простой разговорный язык. Без markdown и эмодзи.\n"
+        "- Обязательно закончи письмо полноценным последним предложением.\n\n"
         "=== ВАКАНСИЯ ===\n"
         + vacancy
         + "\n\n=== ПРОФИЛЬ ===\n"
         + profile
-        + "\n\nВерни только текст письма, без пояснений."
+        + "\n\nВерни только готовое письмо, без пояснений."
     )
 
 
@@ -94,8 +96,8 @@ async def generate(req: GenRequest, request: Request):
                 "content": build_prompt(req.vacancy, req.profile, req.tone),
             }
         ],
-        "temperature": 0.3,
-        "max_tokens": 500,
+        "temperature": 0.2,
+        "max_completion_tokens": 900,
     }
 
     headers = {
@@ -104,8 +106,13 @@ async def generate(req: GenRequest, request: Request):
     }
 
     try:
-        async with httpx.AsyncClient(timeout=40) as client:
+        async with httpx.AsyncClient(timeout=90) as client:
             r = await client.post(GROQ_URL, json=payload, headers=headers)
+
+            if r.status_code in (429, 500, 502, 503, 504):
+                await asyncio.sleep(2)
+                r = await client.post(GROQ_URL, json=payload, headers=headers)
+
     except httpx.HTTPError as e:
         raise HTTPException(502, f"Не удалось подключиться к Groq: {e}") from e
 
@@ -114,6 +121,10 @@ async def generate(req: GenRequest, request: Request):
 
     data = r.json()
     letter = data["choices"][0]["message"]["content"].strip()
+
+    if not letter.endswith((".", "!", "?")):
+        letter += "."
+
     return {"letter": strip_filler_tail(letter)}
 
 
